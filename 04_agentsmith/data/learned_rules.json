@@ -1,23 +1,32 @@
 {
   "metadata": {
-    "generated_at": "2026-11-25T14:37:15+00:00",
+    "generated_at": "2026-11-25T14:49:39+00:00",
     "dataset": "agentsmith-fraud-alerts",
-    "chains_caught": "5/5",
+    "chains_caught": "5/7",
     "false_positives": 0
   },
   "rules": [
     {
       "rule_type": "fan_out",
-      "min_legs": 2,
-      "window_seconds": 60,
-      "min_ratio": 0.5,
+      "min_legs": 3,
+      "window_seconds": 120,
+      "min_ratio": 0.95,
       "requires_flags": [
-        "new_account",
-        "foreign_national",
         "unusual_amount"
       ],
       "points": 60,
-      "rationale": "Repeated rapid outgoing transfers from an account flagged for unusual activity or elevated identity risk can indicate layering."
+      "rationale": "Captures unusually large flagged layering chains that rapidly distribute funds across multiple transfers."
+    },
+    {
+      "rule_type": "split_forward",
+      "min_legs": 2,
+      "window_seconds": 150,
+      "min_ratio": 0.95,
+      "requires_flags": [
+        "unusual_amount"
+      ],
+      "points": 35,
+      "rationale": "Captures flagged layering where most of a received amount is rapidly forwarded in multiple transfers; the flagless fraud chains cannot be safely covered because loosening comparable rules would also trigger on legitimate CHAIN-009."
     }
   ]
 }
