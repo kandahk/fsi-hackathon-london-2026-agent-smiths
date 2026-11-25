@@ -14,6 +14,7 @@ Three evaluators:
 The headline number on screen is the detection accuracy across all scenarios.
 """
 
+import math
 import uuid
 
 from dotenv import load_dotenv
@@ -150,12 +151,23 @@ EVALUATORS = [detection_accuracy, risk_calibration, human_routing]
 # Entry point
 # ---------------------------------------------------------------------------
 
-def average_scores(results) -> dict:
-    totals: dict[str, list[float]] = {}
-    for r in results:
-        for key, val in r.get("feedback", {}).items():
-            totals.setdefault(key, []).append(val)
-    return {k: sum(v) / len(v) for k, v in totals.items()}
+def average_scores(results) -> dict[str, float]:
+    df = results.to_pandas()
+    feedback_columns = [column for column in df.columns if column.startswith("feedback.")]
+    if not feedback_columns:
+        raise ValueError("LangSmith evaluation results contain no feedback columns.")
+
+    averages = df[feedback_columns].mean(numeric_only=True)
+    scores = {
+        column.removeprefix("feedback."): float(averages[column])
+        for column in feedback_columns
+        if column in averages and math.isfinite(float(averages[column]))
+    }
+
+    missing = {evaluator.__name__ for evaluator in EVALUATORS} - scores.keys()
+    if missing:
+        raise ValueError(f"LangSmith evaluation results are missing scores for: {', '.join(sorted(missing))}")
+    return scores
 
 
 def run_experiment(recreate_dataset: bool = False) -> dict:
@@ -171,7 +183,7 @@ def run_experiment(recreate_dataset: bool = False) -> dict:
     )
 
     scores = average_scores(results)
-    detection = scores.get("detection_accuracy", 0.0)
+    detection = scores["detection_accuracy"]
     n = len(SCENARIOS)
     n_fraud = sum(1 for s in SCENARIOS if s["expected_label"] == "fraud")
     n_legit = n - n_fraud
@@ -180,8 +192,8 @@ def run_experiment(recreate_dataset: bool = False) -> dict:
     print(f"  AgentSmith Eval Results ({n} scenarios: {n_fraud} fraud, {n_legit} legitimate)")
     print(f"{'='*55}")
     print(f"  Detection accuracy : {detection:.0%}  ({detection * n:.0f}/{n} correct)")
-    print(f"  Risk calibration   : {scores.get('risk_calibration', 0):.0%}")
-    print(f"  Human routing      : {scores.get('human_routing', 0):.0%}")
+    print(f"  Risk calibration   : {scores['risk_calibration']:.0%}")
+    print(f"  Human routing      : {scores['human_routing']:.0%}")
     print(f"{'='*55}")
     print(f"  View full results in LangSmith: https://smith.langchain.com")
     return scores

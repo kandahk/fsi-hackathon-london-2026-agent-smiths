@@ -8,7 +8,7 @@ class BankEnrichment(BaseModel):
     bank_id: str = Field(description="The bank's ID, e.g. BANK-A")
     bank_name: str = Field(description="The bank's display name")
     risk_flags: list[str] = Field(description="Risk indicators found, e.g. ['new_account','unusual_amount','foreign_national']")
-    new_account_names: list[str] = Field(description="Names of account holders whose account is less than 90 days old")
+    new_account_refs: list[str] = Field(description="Pseudonymous subject references for accounts less than 90 days old")
     assessment: str = Field(description="1-2 sentence plain-English assessment of risk indicators at this bank")
 
 
@@ -21,6 +21,7 @@ Identify risk indicators:
 - High velocity: multiple transactions within seconds
 
 Return your findings as a BankEnrichment structured response.
+Do not include names or other direct identifiers; refer to accounts only by their pseudonymous subject references.
 If the data provided is empty or the bank has no involvement, return an empty risk_flags list and a brief assessment saying so.
 """
 

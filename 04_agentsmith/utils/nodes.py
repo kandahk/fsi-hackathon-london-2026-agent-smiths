@@ -27,7 +27,7 @@ In each task, include the bank's name, the relevant account profiles, and the tr
 
 After all sub-agents respond, output ONLY a JSON array of BankEnrichment objects — one per bank that had data.
 No other text. Example format:
-[{"bank_id":"BANK-A","bank_name":"Albion Bank","risk_flags":["new_account"],"new_account_names":["Alex Turner"],"assessment":"..."}]
+[{"bank_id":"BANK-A","bank_name":"Albion Bank","risk_flags":["new_account"],"new_account_refs":["SUBJECT-A-001"],"assessment":"..."}]
 """
 
 
@@ -102,11 +102,11 @@ def _basic_enrichments(bank_data: dict, legs: list[dict] | None = None) -> list[
     enrichments = []
     for bank_id, data in bank_data.items():
         flags = []
-        new_names = []
+        new_refs = []
         for profile in data.get("profiles", []):
             if profile.get("account_age_days", 999) < 90:
                 flags.append("new_account")
-                new_names.append(profile.get("name", profile["account_id"]))
+                new_refs.append(profile["account_id"])
             if profile.get("home_country", "GB") != "GB":
                 flags.append("foreign_national")
             usual_max = profile.get("usual_amount_range", [0, 999999])[1]
@@ -119,7 +119,7 @@ def _basic_enrichments(bank_data: dict, legs: list[dict] | None = None) -> list[
             bank_id=bank_id,
             bank_name=data["bank_name"],
             risk_flags=list(set(flags)),
-            new_account_names=new_names,
+            new_account_refs=new_refs,
             assessment=f"{len(data.get('profiles', []))} account(s) reviewed. Flags: {', '.join(set(flags)) or 'none'}.",
         ).model_dump())
     return enrichments
@@ -252,10 +252,10 @@ def compute_risk(
             reasons.append("systematic amount decrement across legs (fee-extraction pattern)")
 
     # Rule 3: new accounts flagged by bank analysts
-    all_new_names = [name for e in enrichments for name in e.get("new_account_names", [])]
-    if all_new_names:
+    all_new_refs = [ref for e in enrichments for ref in e.get("new_account_refs", [])]
+    if all_new_refs:
         score += 15
-        reasons.append(f"new accounts (< 90 days old): {', '.join(all_new_names)}")
+        reasons.append(f"new accounts (< 90 days old): {', '.join(all_new_refs)}")
 
     # Rule 4: foreign nationals in chain
     all_flags = [f for e in enrichments for f in e.get("risk_flags", [])]
