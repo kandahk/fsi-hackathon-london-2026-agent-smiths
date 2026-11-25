@@ -18,6 +18,14 @@ class AgentState(AgentInput):
     audit_memo: str
 
 
-class AgentContext(TypedDict):
+class AgentContext(TypedDict, total=False):
     confidence_threshold: float
     circular_time_window_seconds: int
+    # "collective" (default): the agent sees all three banks. "single_bank": it only sees the alert's own bank,
+    # which is how each bank works today. This is the baseline for the collective-intelligence comparison.
+    visibility: Literal["collective", "single_bank"]
+    # True (default): apply the rules in data/learned_rules.json. False reproduces the original rule set.
+    use_learned_rules: bool
+    # "llm" (default): bank analyst sub-agents (Deep Agents). "basic": deterministic profile checks, used for fast,
+    # repeatable evaluation runs without model calls.
+    enrichment: Literal["llm", "basic"]

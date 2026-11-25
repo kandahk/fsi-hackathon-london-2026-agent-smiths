@@ -7,14 +7,16 @@ from typing import Literal
 from deepagents import create_deep_agent
 from langchain.chat_models import init_chat_model
 from langchain_core.messages import ToolMessage
+from langgraph.runtime import Runtime
 from langgraph.store.base import BaseStore
 from langgraph.types import interrupt
 
 from sub_agents import BankEnrichment, bank_a_subagent, bank_b_subagent, bank_c_subagent
-from tools.network import find_chain, find_transaction
+from tools.network import bank_dir_for, find_chain, find_transaction
 from utils import db
 from utils.models import model
-from utils.state import AgentState
+from utils.rules import apply_learned_rules, load_learned_rules
+from utils.state import AgentContext, AgentState
 
 _ENRICHMENT_ORCHESTRATOR_PROMPT = """\
 You are a fraud investigation coordinator.
@@ -35,6 +37,11 @@ No other text. Example format:
 
 def _parse_ts(ts: str) -> datetime:
     return datetime.fromisoformat(ts)
+
+
+def _context(runtime) -> dict:
+    """Run-time options. Tolerates a missing runtime so nodes can also be called directly (evals, notebooks)."""
+    return dict(getattr(runtime, "context", None) or {})
 
 
 def _fetch_bank_data(legs: list[dict]) -> dict:
@@ -86,8 +93,12 @@ def _extract_enrichments(messages: list, bank_data: dict) -> list[dict]:
     return _basic_enrichments(bank_data)
 
 
-def _basic_enrichments(bank_data: dict) -> list[dict]:
-    """Rule-based fallback enrichment used when deep agent extraction fails."""
+def _basic_enrichments(bank_data: dict, legs: list[dict] | None = None) -> list[dict]:
+    """Deterministic enrichment: the fallback when deep agent extraction fails, and the `enrichment="basic"` mode.
+
+    Applies the same checks the bank analyst sub-agents are prompted with (new account, foreign national, unusual
+    amount). `legs` is the chain being investigated, used for the unusual-amount check.
+    """
     enrichments = []
     for bank_id, data in bank_data.items():
         flags = []
@@ -98,6 +109,12 @@ def _basic_enrichments(bank_data: dict) -> list[dict]:
                 new_names.append(profile.get("name", profile["account_id"]))
             if profile.get("home_country", "GB") != "GB":
                 flags.append("foreign_national")
+            usual_max = profile.get("usual_amount_range", [0, 999999])[1]
+            if any(
+                l.get("account_id") == profile["account_id"] and l.get("amount", 0) > 3 * usual_max
+                for l in legs or []
+            ):
+                flags.append("unusual_amount")
         enrichments.append(BankEnrichment(
             bank_id=bank_id,
             bank_name=data["bank_name"],
@@ -119,15 +136,19 @@ def load_trigger(state: AgentState) -> dict:
     return {"trigger_transaction": txn}
 
 
-def detect_chain(state: AgentState) -> dict:
+def detect_chain(state: AgentState, runtime: Runtime[AgentContext] = None) -> dict:
+    """Find the legs of the payment chain. visibility="single_bank" limits the view to the alert's own bank."""
     chain_id = state["trigger_transaction"].get("chain_id")
     if not chain_id:
         return {"chain_id": None, "chain_legs": [state["trigger_transaction"]]}
-    legs = find_chain(chain_id)
+    if _context(runtime).get("visibility") == "single_bank":
+        legs = find_chain(chain_id, [bank_dir_for(state["trigger_transaction"]["bank_id"])])
+    else:
+        legs = find_chain(chain_id)
     return {"chain_id": chain_id, "chain_legs": legs}
 
 
-def enrich_banks(state: AgentState) -> dict:
+def enrich_banks(state: AgentState, runtime: Runtime[AgentContext] = None) -> dict:
     """Dispatch one bank analyst sub-agent per involved bank, in parallel, via a deep agent."""
     legs = state["chain_legs"]
     chain_id = state.get("chain_id", "unknown")
@@ -135,6 +156,9 @@ def enrich_banks(state: AgentState) -> dict:
 
     if not bank_data:
         return {"bank_enrichments": []}
+
+    if _context(runtime).get("enrichment") == "basic":
+        return {"bank_enrichments": _basic_enrichments(bank_data, legs)}
 
     prompt = (
         f"Investigate chain {chain_id}. "
@@ -152,15 +176,44 @@ def enrich_banks(state: AgentState) -> dict:
         result = enrichment_agent.invoke({"messages": [{"role": "user", "content": prompt}]})
         enrichments = _extract_enrichments(result.get("messages", []), bank_data)
     except Exception:
-        enrichments = _basic_enrichments(bank_data)
+        enrichments = _basic_enrichments(bank_data, legs)
 
     return {"bank_enrichments": enrichments}
 
 
-def score_risk(state: AgentState, store: BaseStore | None = None) -> dict:
+def score_risk(
+    state: AgentState, runtime: Runtime[AgentContext] = None, store: BaseStore | None = None
+) -> dict:
     """Rule-based fraud scorer, boosted by institutional memory of past confirmed fraud."""
-    legs = state["chain_legs"]
-    enrichments = state.get("bank_enrichments", [])
+    rules = load_learned_rules() if _context(runtime).get("use_learned_rules", True) else []
+    score, reasons = compute_risk(state["chain_legs"], state.get("bank_enrichments", []), state.get("chain_id"), rules)
+
+    # Memory boost: accounts in this chain previously linked to confirmed fraud
+    if store and state.get("chain_id"):
+        try:
+            past_items = store.search(("fraud_decisions", "global"), limit=200)
+            chain_accounts = {l.get("account_id") for l in state["chain_legs"]}
+            for item in past_items:
+                v = item.value
+                if v.get("decision") == "investigate":
+                    if chain_accounts & set(v.get("accounts", [])):
+                        score += 10
+                        reasons.append("accounts previously linked to confirmed fraud (memory)")
+                        break
+        except Exception:
+            pass
+
+    return {"risk_score": min(score, 100), "risk_reasons": reasons}
+
+
+def compute_risk(
+    legs: list[dict], enrichments: list[dict], chain_id: str | None, learned_rules: list[dict]
+) -> tuple[int, list[str]]:
+    """Pure scoring function: the built-in rules plus any learned rules. Returns (score, reasons).
+
+    Kept separate from the node so the improvement loop can score candidate rules without running the graph.
+    """
+    state = {"chain_id": chain_id}
     score = 0
     reasons = []
 
@@ -200,22 +253,12 @@ def score_risk(state: AgentState, store: BaseStore | None = None) -> dict:
         score += 10
         reasons.append("transaction amounts exceed account holders' usual spending range")
 
-    # Memory boost: accounts in this chain previously linked to confirmed fraud
-    if store and state.get("chain_id"):
-        try:
-            past_items = store.search(("fraud_decisions", "global"), limit=200)
-            chain_accounts = {l.get("account_id") for l in legs}
-            for item in past_items:
-                v = item.value
-                if v.get("decision") == "investigate":
-                    if chain_accounts & set(v.get("accounts", [])):
-                        score += 10
-                        reasons.append("accounts previously linked to confirmed fraud (memory)")
-                        break
-        except Exception:
-            pass
+    # Learned rules (data/learned_rules.json), produced by the evaluation-driven improvement loop (evals/improve.py)
+    points, learned_reasons = apply_learned_rules(legs, learned_rules)
+    score += points
+    reasons.extend(learned_reasons)
 
-    return {"risk_score": min(score, 100), "risk_reasons": reasons}
+    return min(score, 100), reasons
 
 
 def route_decision(state: AgentState) -> Literal["human_review", "auto_clear"]:

@@ -15,9 +15,17 @@ def find_transaction(transaction_id: str) -> dict | None:
     return None
 
 
-def find_chain(chain_id: str) -> list[dict]:
-    """Collect all legs of a chain across all banks, ordered by chain_position."""
+def bank_dir_for(bank_id: str) -> str:
+    """BANK-A -> bank_a"""
+    return bank_id.lower().replace("-", "_")
+
+
+def find_chain(chain_id: str, bank_dirs: list[str] | None = None) -> list[dict]:
+    """Collect the legs of a chain, ordered by chain_position.
+
+    Searches every bank by default. Pass `bank_dirs` to restrict the view, e.g. to a single bank.
+    """
     legs = []
-    for bank_dir in BANK_DIRS:
+    for bank_dir in bank_dirs or BANK_DIRS:
         legs.extend(db.query(f"{bank_dir}/transactions", chain_id=chain_id))
     return sorted(legs, key=lambda t: (t.get("chain_position") or 0))

@@ -13,3 +13,9 @@ dependencies = [
     "pydantic>=2,<3",
     "langsmith>=0.4,<1",
 ]
+
+# Declared explicitly: with several top-level folders (data/, evals/, modules/) setuptools' flat-layout
+# auto-discovery refuses to guess, which breaks the LangSmith deployment build.
+[tool.setuptools]
+packages = ["utils", "tools"]
+py-modules = ["agent", "sub_agents"]
