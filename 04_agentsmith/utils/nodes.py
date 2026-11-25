@@ -13,7 +13,7 @@ from langgraph.types import interrupt
 
 from sub_agents import BankEnrichment, bank_a_subagent, bank_b_subagent, bank_c_subagent
 from tools.network import bank_dir_for, find_chain, find_transaction
-from utils import db
+from utils import PROJECT_ROOT, db
 from utils.models import model
 from utils.rules import apply_learned_rules, load_learned_rules
 from utils.state import AgentContext, AgentState
@@ -339,6 +339,22 @@ def write_audit(state: AgentState, store: BaseStore | None = None) -> dict:
                     "pattern": "circular" if state.get("chain_id") else None,
                 },
             )
+        except Exception:
+            pass
+
+    # Feed confirmed human decisions back into the labels file so improve.py can learn from them.
+    # build_examples() deduplicates by chain_id (last entry wins), so this entry overrides any
+    # prior label for the same chain without changing the original ground-truth rows.
+    if state.get("decided_by") == "human" and state.get("chain_id"):
+        try:
+            label = {
+                "chain_id": state["chain_id"],
+                "label": "fraud" if state["decision"] == "investigate" else "legitimate",
+                "pattern": "confirmed",
+                "notes": state.get("reviewer_notes") or f"Human confirmed: {state['decision']}",
+            }
+            with open(PROJECT_ROOT / "data" / "fraud_labels.jsonl", "a", encoding="utf-8") as fh:
+                fh.write(json.dumps(label) + "\n")
         except Exception:
             pass
 
