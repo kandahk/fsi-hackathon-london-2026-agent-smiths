@@ -1,4 +1,3 @@
-from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import END, START, StateGraph
 
 from utils.nodes import (
@@ -44,7 +43,7 @@ def build_agent(**kwargs):
     builder.add_edge("auto_clear", "write_audit")
     builder.add_edge("write_audit", END)
 
-    return builder.compile(checkpointer=InMemorySaver(), **kwargs)
+    return builder.compile(**kwargs)
 
 
 agent = build_agent()
