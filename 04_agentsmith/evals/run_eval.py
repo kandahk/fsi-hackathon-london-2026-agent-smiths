@@ -62,8 +62,21 @@ def build_examples() -> list[dict]:
 
 def ensure_dataset(client: Client):
     if client.has_dataset(dataset_name=DATASET):
-        print(f"Dataset '{DATASET}' already exists, reusing it.")
-        return client.read_dataset(dataset_name=DATASET)
+        ds = client.read_dataset(dataset_name=DATASET)
+        # Keep the dataset in step with the data files: add alerts that appeared since it was created
+        # (e.g. new scenarios, or chains labelled by analysts). Existing examples are left untouched.
+        known = {e.inputs["alert_transaction_id"] for e in client.list_examples(dataset_id=ds.id)}
+        missing = [e for e in build_examples() if e["inputs"]["alert_transaction_id"] not in known]
+        if missing:
+            client.create_examples(
+                dataset_id=ds.id,
+                inputs=[e["inputs"] for e in missing],
+                outputs=[e["outputs"] for e in missing],
+                metadata=[e["metadata"] for e in missing],
+                splits=[e["split"] for e in missing],
+            )
+        print(f"Dataset '{DATASET}' exists ({len(known)} examples); added {len(missing)} new.")
+        return ds
     ds = client.create_dataset(
         DATASET, description="AgentSmith: every transaction across Banks A/B/C with fraud labels."
     )

@@ -8,6 +8,10 @@ Rule types (all work on the legs of one payment chain):
   fan_in         one account receives `min_legs` transfers within `window_seconds`
   split_forward  one account receives money, then within `window_seconds` forwards it in `min_legs`+ transfers that
                  add up to at least `min_ratio` of what came in
+
+Any rule can also set `requires_flags`: it then only fires if the bank analysts found at least one of those risk
+flags in the chain. This lets a movement pattern (fast fan-out) be told apart from legitimate lookalikes (a property
+settlement between established accounts) by who is involved, not by finely tuned numbers.
 """
 
 import json
@@ -21,12 +25,23 @@ from utils import PROJECT_ROOT
 RULES_PATH = PROJECT_ROOT / "data" / "learned_rules.json"
 
 
+RiskFlag = Literal["new_account", "foreign_national", "unusual_amount"]
+
+
 class LearnedRule(BaseModel):
     rule_type: Literal["fan_out", "fan_in", "split_forward"]
     min_legs: int = Field(ge=2, le=10, description="Minimum number of transfers that must match")
     window_seconds: int = Field(ge=10, le=3600, description="All matching transfers must fall inside this window")
     min_ratio: float = Field(
         default=0.9, ge=0.5, le=1.2, description="split_forward only: forwarded total / received amount"
+    )
+    requires_flags: list[RiskFlag] = Field(
+        default_factory=list,
+        description=(
+            "Optional. If set, the rule only fires when the bank analysts found at least one of these flags: "
+            "new_account (account < 90 days old), foreign_national (home country not GB), "
+            "unusual_amount (a transfer > 3x the holder's usual maximum). Empty = no condition."
+        ),
     )
     points: int = Field(ge=5, le=60, description="Risk points added when the rule fires")
     rationale: str = Field(description="One sentence: the fraud behaviour this rule captures")
@@ -104,12 +119,21 @@ def _match(legs: list[dict], rule: dict) -> str | None:
     return None
 
 
-def apply_learned_rules(legs: list[dict], rules: list[dict]) -> tuple[int, list[str]]:
-    """Total points and reasons for every learned rule that fires on this chain."""
+def apply_learned_rules(
+    legs: list[dict], rules: list[dict], flags: set[str] | frozenset[str] = frozenset()
+) -> tuple[int, list[str]]:
+    """Total points and reasons for every learned rule that fires on this chain.
+
+    `flags` are the risk flags the bank analysts found in the chain; a rule with `requires_flags` needs one of them.
+    """
     points, reasons = 0, []
     for rule in rules:
+        required = rule.get("requires_flags") or []
+        if required and not set(required) & set(flags):
+            continue
         reason = _match(legs, rule)
         if reason:
             points += rule["points"]
-            reasons.append(f"{reason} (learned rule, +{rule['points']})")
+            condition = f", needs {'/'.join(required)}" if required else ""
+            reasons.append(f"{reason} (learned rule, +{rule['points']}{condition})")
     return points, reasons

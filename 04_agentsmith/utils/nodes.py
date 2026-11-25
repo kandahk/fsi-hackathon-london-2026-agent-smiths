@@ -272,7 +272,7 @@ def compute_risk(
         reasons.append("transaction amounts exceed account holders' usual spending range")
 
     # Learned rules (data/learned_rules.json), produced by the evaluation-driven improvement loop (evals/improve.py)
-    points, learned_reasons = apply_learned_rules(legs, learned_rules)
+    points, learned_reasons = apply_learned_rules(legs, learned_rules, set(all_flags))
     score += points
     reasons.extend(learned_reasons)
 

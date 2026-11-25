@@ -1,6 +1,6 @@
 {
   "metadata": {
-    "generated_at": "2026-11-25T12:49:17+00:00",
+    "generated_at": "2026-11-25T14:37:15+00:00",
     "dataset": "agentsmith-fraud-alerts",
     "chains_caught": "5/5",
     "false_positives": 0
@@ -8,19 +8,16 @@
   "rules": [
     {
       "rule_type": "fan_out",
-      "min_legs": 3,
-      "window_seconds": 120,
-      "min_ratio": 0.9,
-      "points": 60,
-      "rationale": "Captures rapid repeated dispersal from one account while excluding the legitimate chain with only two outgoing transfers."
-    },
-    {
-      "rule_type": "split_forward",
       "min_legs": 2,
-      "window_seconds": 135,
-      "min_ratio": 0.98,
-      "points": 35,
-      "rationale": "Captures an account that rapidly forwards nearly all of a received amount in multiple transfers."
+      "window_seconds": 60,
+      "min_ratio": 0.5,
+      "requires_flags": [
+        "new_account",
+        "foreign_national",
+        "unusual_amount"
+      ],
+      "points": 60,
+      "rationale": "Repeated rapid outgoing transfers from an account flagged for unusual activity or elevated identity risk can indicate layering."
     }
   ]
 }

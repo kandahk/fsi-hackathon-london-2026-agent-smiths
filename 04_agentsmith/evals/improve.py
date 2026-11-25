@@ -39,7 +39,14 @@ def score_alert(txn_id: str, rules: list[dict]) -> dict:
     legs = find_chain(txn["chain_id"]) if txn.get("chain_id") else [txn]
     enrichments = _basic_enrichments(_fetch_bank_data(legs), legs)
     score, reasons = compute_risk(legs, enrichments, txn.get("chain_id"), rules)
-    return {"chain_id": txn.get("chain_id"), "risk_score": score, "risk_reasons": reasons, "flagged": score >= THRESHOLD}
+    flags = sorted({f for e in enrichments for f in e.get("risk_flags", [])})
+    return {
+        "chain_id": txn.get("chain_id"),
+        "risk_score": score,
+        "risk_reasons": reasons,
+        "risk_flags": flags,
+        "flagged": score >= THRESHOLD,
+    }
 
 
 def make_target(rules: list[dict]):
@@ -49,6 +56,14 @@ def make_target(rules: list[dict]):
 def evaluate_rules(rules: list[dict]) -> dict:
     pairs = [(score_alert(e["inputs"]["alert_transaction_id"], rules), e["outputs"]) for e in build_examples()]
     return compute_metrics(pairs)
+
+
+def loosened(rules: list[dict]) -> list[dict]:
+    """The same rules with thresholds relaxed a little. A sound rule must not start flagging legitimate chains."""
+    return [
+        {**r, "min_ratio": round(max(r.get("min_ratio", 0.9) - 0.03, 0.5), 3), "window_seconds": int(r["window_seconds"] * 1.25)}
+        for r in rules
+    ]
 
 
 def chain_summary(chain_id: str | None, txn_id: str) -> dict:
@@ -76,7 +91,12 @@ def failure_report(rules: list[dict]) -> dict:
             continue
         seen.add(key)
         result = score_alert(txn_id, rules)
-        entry = {**chain_summary(ref["chain_id"], txn_id), "score": result["risk_score"], "pattern": ref["pattern"]}
+        entry = {
+            **chain_summary(ref["chain_id"], txn_id),
+            "score": result["risk_score"],
+            "risk_flags": result["risk_flags"],
+            "pattern": ref["pattern"],
+        }
         if ref["label"] == "fraud" and not result["flagged"]:
             missed.append(entry)
         elif ref["label"] != "fraud":
@@ -88,13 +108,19 @@ PROMPT = """\
 You improve a fraud-detection scorer for a multi-bank payment network. An alert is routed to a human analyst when
 its risk score reaches {threshold}; below that it is auto-cleared. The current rules miss the fraud chains below.
 
-Propose up to 3 rules using ONLY this schema (rule_type, min_legs, window_seconds, min_ratio, points, rationale):
+Propose up to 3 rules using ONLY this schema
+(rule_type, min_legs, window_seconds, min_ratio, requires_flags, points, rationale):
 - fan_out: one account sends `min_legs` transfers within `window_seconds`
 - fan_in: one account receives `min_legs` transfers within `window_seconds`
 - split_forward: one account receives money, then within `window_seconds` forwards it in `min_legs`+ transfers
   totalling at least `min_ratio` of the amount received
+`requires_flags` (optional) makes a rule fire only when the bank analysts found at least one of the listed flags in
+the chain: new_account, foreign_national, unusual_amount. Each chain below shows its `risk_flags`.
 `points` is added to the chain's current score (shown below), so choose it to lift missed fraud chains to at least
-{threshold} while keeping every legitimate chain below {threshold}. Prefer the fewest, most specific rules. Legitimate
+{threshold} while keeping every legitimate chain below {threshold}. Prefer the fewest, most specific rules.
+IMPORTANT: separate fraud from legitimate lookalikes using `requires_flags` (who is involved) rather than by tuning
+numeric thresholds to sit between two examples. Every proposal is re-tested with thresholds loosened (min_ratio
+lowered by 0.03, windows widened by 25%); it is rejected if that loosening creates a false positive. Legitimate
 payroll, supplier and property payments also move money to several accounts, so thresholds must separate them.
 
 Current state:
@@ -137,9 +163,20 @@ def main():
               f"FN={metrics['false_negatives']} FP={metrics['false_positives']}  [{metrics['experiment']}]")
         for rule in candidate:
             print("   -", rule["rule_type"], f"min_legs={rule['min_legs']} window={rule['window_seconds']}s "
-                  f"min_ratio={rule['min_ratio']} points={rule['points']}: {rule['rationale']}")
+                  f"min_ratio={rule['min_ratio']} requires={rule.get('requires_flags') or 'nothing'} "
+                  f"points={rule['points']}: {rule['rationale']}")
 
-        if metrics["false_positives"] == 0 and metrics["chains_caught"] > best["chains_caught"]:
+        robust = evaluate_rules(loosened(candidate))
+        fragile = robust["false_positives"] > 0 or robust["chains_caught"] < metrics["chains_caught"]
+        if fragile and metrics["false_positives"] == 0 and metrics["chains_caught"] > best["chains_caught"]:
+            print(f"   rejected as fragile: with loosened thresholds it gives {robust['false_positives']} false "
+                  f"positives and {robust['chains_caught']}/{robust['fraud_chains']} chains")
+            feedback = (
+                "Your previous proposal scored well but is FRAGILE: with min_ratio lowered by 0.03 and windows widened "
+                f"by 25% it produced {robust['false_positives']} false positives. Use requires_flags to tell fraud "
+                f"from the legitimate lookalikes instead of finely tuned thresholds. Proposal was: {json.dumps(candidate)}"
+            )
+        elif metrics["false_positives"] == 0 and metrics["chains_caught"] > best["chains_caught"]:
             best, best_rules = metrics, candidate
             if best["chains_caught"] == best["fraud_chains"]:
                 break
