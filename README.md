@@ -46,13 +46,14 @@ chain counts as caught if any of its alerts is routed to a human. Recall is over
 | Configuration | Fraud chains caught | Recall | False positives |
 |---|---|---|---|
 | One bank only, original rules | 0/7 | 0% | 0 |
-| One bank only, learned rules | 1/7 | 7% | 0 |
+| One bank only, learned rules | 2/7 | 12% | 0 |
 | All three banks, original rules | 3/7 | 42% | 0 |
 | **All three banks, learned rules** | **5/7** | **72%** | **0** |
 
-These come from the local graph with deterministic enrichment (`--enrichment basic`), so they are reproducible. The
-same four configurations are also run against the deployed agent with the real LLM analysts; those experiments are in
-LangSmith as `agentsmith-v*-remote-*` on the `agentsmith-fraud-alerts` dataset.
+These are from the **deployed agent with the real LLM bank analysts**, as LangSmith experiments named
+`agentsmith-v4-remote-*` on the `agentsmith-fraud-alerts` dataset. A faster, reproducible version runs the local graph
+with deterministic enrichment (`--enrichment basic`); it gives the same result except one bank with learned rules, which
+catches 1/7 chains there, because the LLM analysts occasionally flag more.
 
 **What the numbers say.** Seeing all three banks takes recall from 0% to 42% with the original rules, and the learned
 rules take it to 72%. Two fraud chains (010 and 011, structuring and pass-through between established domestic
