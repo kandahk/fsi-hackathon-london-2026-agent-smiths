@@ -16,6 +16,7 @@ class AgentState(AgentInput):
     decided_by: Literal["agent", "human"]
     reviewer_notes: str
     audit_memo: str
+    notification: dict  # outcome of the analyst Slack alert: {status: sent|skipped|failed, detail}
 
 
 class AgentContext(TypedDict, total=False):
@@ -29,3 +30,5 @@ class AgentContext(TypedDict, total=False):
     # "llm" (default): bank analyst sub-agents (Deep Agents). "basic": deterministic profile checks, used for fast,
     # repeatable evaluation runs without model calls.
     enrichment: Literal["llm", "basic"]
+    # False: never alert the analyst for this run (evals and notebooks set this so they don't post to Slack).
+    notify: bool

@@ -221,6 +221,7 @@ def context_from(args) -> dict:
         "visibility": args.visibility,
         "use_learned_rules": args.rules == "learned",
         "enrichment": args.enrichment,
+        "notify": False,  # evals must never post to Slack
     }
 
 

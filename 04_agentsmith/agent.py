@@ -6,6 +6,7 @@ from utils.nodes import (
     enrich_banks,
     human_review,
     load_trigger,
+    notify_analyst,
     route_decision,
     score_risk,
     write_audit,
@@ -24,6 +25,7 @@ def build_agent(**kwargs):
     builder.add_node("detect_chain", detect_chain)
     builder.add_node("enrich_banks", enrich_banks)       # deep agent: 3 bank sub-agents in parallel
     builder.add_node("score_risk", score_risk)
+    builder.add_node("notify_analyst", notify_analyst)   # Slack alert to the analyst when the threshold is crossed
     builder.add_node("human_review", human_review)
     builder.add_node("auto_clear", auto_clear)
     builder.add_node("write_audit", write_audit)
@@ -33,6 +35,7 @@ def build_agent(**kwargs):
     builder.add_edge("detect_chain", "enrich_banks")
     builder.add_edge("enrich_banks", "score_risk")
     builder.add_conditional_edges("score_risk", route_decision)
+    builder.add_edge("notify_analyst", "human_review")
     builder.add_edge("human_review", "write_audit")
     builder.add_edge("auto_clear", "write_audit")
     builder.add_edge("write_audit", END)

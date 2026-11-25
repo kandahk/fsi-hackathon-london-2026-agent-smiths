@@ -1,12 +1,14 @@
 """LangGraph node functions for the AgentSmith fraud detection graph."""
 
 import json
-from datetime import datetime
+import os
+from datetime import datetime, timedelta, timezone
 from typing import Literal
 
 from deepagents import create_deep_agent
 from langchain.chat_models import init_chat_model
 from langchain_core.messages import ToolMessage
+from langchain_core.runnables import RunnableConfig
 from langgraph.runtime import Runtime
 from langgraph.store.base import BaseStore
 from langgraph.types import interrupt
@@ -15,6 +17,7 @@ from sub_agents import BankEnrichment, bank_a_subagent, bank_b_subagent, bank_c_
 from tools.network import bank_dir_for, find_chain, find_transaction
 from utils import PROJECT_ROOT, db
 from utils.models import model
+from utils.notify import send_alert
 from utils.rules import apply_learned_rules, load_learned_rules
 from utils.state import AgentContext, AgentState
 
@@ -276,10 +279,62 @@ def compute_risk(
     return min(score, 100), reasons
 
 
-def route_decision(state: AgentState) -> Literal["human_review", "auto_clear"]:
+def route_decision(state: AgentState) -> Literal["notify_analyst", "auto_clear"]:
     if state["risk_score"] >= 70:
-        return "human_review"
+        return "notify_analyst"
     return "auto_clear"
+
+
+def notify_analyst(
+    state: AgentState,
+    config: RunnableConfig,
+    runtime: Runtime[AgentContext] = None,
+    store: BaseStore | None = None,
+) -> dict:
+    """Post a Slack alert that a chain crossed the threshold, then hand over to human review.
+
+    A separate node (not part of human_review) because human_review re-runs when the analyst resumes it, which
+    would post the alert twice. Each transaction in a chain can raise its own alert, so the platform store also
+    remembers which chains were already notified and suppresses repeats for ALERT_DEDUPE_HOURS (default 24, 0 = off).
+    """
+    if _context(runtime).get("notify") is False:
+        return {"notification": {"status": "skipped", "detail": "notifications disabled for this run"}}
+
+    thread_id = (config or {}).get("configurable", {}).get("thread_id")
+    key = state.get("chain_id") or state["alert_transaction_id"]
+    namespace = ("notified_chains", "global")
+    window = timedelta(hours=float(os.environ.get("ALERT_DEDUPE_HOURS", "24")))
+
+    if store and window > timedelta(0):
+        try:
+            previous = store.get(namespace, key)
+            if previous and datetime.now(timezone.utc) - datetime.fromisoformat(previous.value["notified_at"]) < window:
+                return {
+                    "notification": {
+                        "status": "duplicate",
+                        "detail": f"{key} already notified at {previous.value['notified_at']} "
+                        f"(thread {previous.value.get('thread_id')})",
+                    }
+                }
+        except Exception:
+            pass  # never let the dedupe lookup block a notification
+
+    result = send_alert(state, thread_id)
+    if result["status"] == "sent" and store:
+        try:
+            store.put(
+                namespace,
+                key,
+                {
+                    "notified_at": datetime.now(timezone.utc).isoformat(),
+                    "thread_id": thread_id,
+                    "alert_transaction_id": state["alert_transaction_id"],
+                    "risk_score": state["risk_score"],
+                },
+            )
+        except Exception:
+            pass
+    return {"notification": result}
 
 
 def human_review(state: AgentState) -> dict:
@@ -321,6 +376,8 @@ def write_audit(state: AgentState, store: BaseStore | None = None) -> dict:
     for e in state.get("bank_enrichments", []):
         lines.append(f"  {e.get('bank_id')}: {e.get('assessment', '')}")
     lines.append(f"Decision: {state['decision'].upper()} (by {state['decided_by']})")
+    if state.get("notification"):
+        lines.append(f"Analyst notification: {state['notification']['status']} ({state['notification'].get('detail', '')})")
     if state.get("reviewer_notes"):
         lines.append(f"Reviewer notes: {state['reviewer_notes']}")
 
