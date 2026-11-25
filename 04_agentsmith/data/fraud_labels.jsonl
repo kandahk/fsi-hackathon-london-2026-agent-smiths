@@ -1,0 +1,9 @@
+{"chain_id": "CHAIN-001", "label": "fraud", "pattern": "circular", "notes": "£5,000 round-trip BANK-A→BANK-B→BANK-C→BANK-A in under 5 minutes, amounts decrement by ~2% each hop"}
+{"chain_id": "CHAIN-002", "label": "fraud", "pattern": "circular", "notes": "£12,000 round-trip with foreign counterparty leg (BANK-B account holder home_country=RU), new accounts at all three banks"}
+{"chain_id": "CHAIN-003", "label": "fraud", "pattern": "circular", "notes": "£3,200 rapid circular, all accounts opened within last 60 days"}
+{"chain_id": "CHAIN-004", "label": "fraud", "pattern": "layering", "notes": "£20,000 split into four outbound transfers from BANK-A within 2 minutes, reassembled at BANK-C"}
+{"chain_id": "CHAIN-005", "label": "fraud", "pattern": "layering", "notes": "£8,500 split across two BANK-B accounts then forwarded to BANK-C in rapid succession"}
+{"chain_id": "CHAIN-006", "label": "legitimate", "pattern": null, "notes": "Monthly payroll disbursement from employer at BANK-A to staff accounts at BANK-B and BANK-C"}
+{"chain_id": "CHAIN-007", "label": "legitimate", "pattern": null, "notes": "Supplier invoice settlement, single large transfer BANK-A to BANK-C, established accounts"}
+{"chain_id": "CHAIN-008", "label": "legitimate", "pattern": null, "notes": "International wire transfer BANK-B to BANK-C for property deposit, amounts consistent with customer profile"}
+{"chain_id": null, "transaction_id": "TXN-A-010", "label": "legitimate", "pattern": null, "notes": "Single-bank domestic card payment, no cross-bank pattern"}

@@ -1,0 +1,8 @@
+{
+  "dependencies": ["."],
+  "graphs": {
+    "agentsmith": "./agent.py:agent"
+  },
+  "env": "../.env",
+  "python_version": "3.13"
+}

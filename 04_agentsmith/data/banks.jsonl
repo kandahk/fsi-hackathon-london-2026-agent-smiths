@@ -1,0 +1,3 @@
+{"bank_id": "BANK-A", "name": "Albion Bank", "country": "GB", "risk_tier": "low", "data_dir": "bank_a"}
+{"bank_id": "BANK-B", "name": "Bridgewater Bank", "country": "GB", "risk_tier": "medium", "data_dir": "bank_b"}
+{"bank_id": "BANK-C", "name": "Crown Financial", "country": "GB", "risk_tier": "medium", "data_dir": "bank_c"}
