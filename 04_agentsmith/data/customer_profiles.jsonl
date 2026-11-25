@@ -11,3 +11,11 @@
 {"account_id": "SUBJECT-A-005", "bank_id": "BANK-A", "home_country": "GB", "usual_amount_range": [1000, 50000], "account_age_days": 1825, "risk_flag": false}
 {"account_id": "SUBJECT-B-004", "bank_id": "BANK-B", "home_country": "GB", "usual_amount_range": [1000, 100000], "account_age_days": 2190, "risk_flag": false}
 {"account_id": "SUBJECT-C-004", "bank_id": "BANK-C", "home_country": "GB", "usual_amount_range": [1000, 80000], "account_age_days": 1460, "risk_flag": false}
+{"account_id": "SUBJECT-A-006", "bank_id": "BANK-A", "home_country": "GB", "usual_amount_range": [2000, 15000], "account_age_days": 1500, "risk_flag": false}
+{"account_id": "SUBJECT-A-007", "bank_id": "BANK-A", "home_country": "GB", "usual_amount_range": [3000, 25000], "account_age_days": 2000, "risk_flag": false}
+{"account_id": "SUBJECT-B-005", "bank_id": "BANK-B", "home_country": "GB", "usual_amount_range": [1000, 12000], "account_age_days": 900, "risk_flag": false}
+{"account_id": "SUBJECT-B-006", "bank_id": "BANK-B", "home_country": "GB", "usual_amount_range": [1000, 12000], "account_age_days": 1100, "risk_flag": false}
+{"account_id": "SUBJECT-B-007", "bank_id": "BANK-B", "home_country": "GB", "usual_amount_range": [2000, 25000], "account_age_days": 1200, "risk_flag": false}
+{"account_id": "SUBJECT-C-005", "bank_id": "BANK-C", "home_country": "GB", "usual_amount_range": [1000, 12000], "account_age_days": 1300, "risk_flag": false}
+{"account_id": "SUBJECT-C-006", "bank_id": "BANK-C", "home_country": "GB", "usual_amount_range": [1000, 12000], "account_age_days": 700, "risk_flag": false}
+{"account_id": "SUBJECT-C-007", "bank_id": "BANK-C", "home_country": "GB", "usual_amount_range": [1000, 12000], "account_age_days": 1600, "risk_flag": false}

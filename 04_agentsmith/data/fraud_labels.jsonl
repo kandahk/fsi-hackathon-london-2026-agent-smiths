@@ -8,3 +8,5 @@
 {"chain_id": "CHAIN-008", "label": "legitimate", "pattern": null, "notes": "International wire transfer BANK-B to BANK-C for property deposit, amounts consistent with customer profile"}
 {"chain_id": null, "transaction_id": "TXN-A-010", "label": "legitimate", "pattern": null, "notes": "Single-bank domestic card payment, no cross-bank pattern"}
 {"chain_id": "CHAIN-009", "label": "legitimate", "pattern": null, "notes": "Property settlement: established account receives £120k and distributes to solicitor, estate agent and deposit account within 2 minutes — legitimate conveyancing, rapid distribution triggers learned rules"}
+{"chain_id": "CHAIN-010", "label": "fraud", "pattern": "layering", "notes": "Structuring: established domestic account splits \u00a328.2k into three \u00a39,400 transfers (just under \u00a310k) to three established accounts within 80 seconds. No identity or amount red flags."}
+{"chain_id": "CHAIN-011", "label": "fraud", "pattern": "layering", "notes": "Pass-through: \u00a319,000 received by an established account and forwarded within 70 seconds as two \u00a39,400 transfers (just under \u00a310k). No identity or amount red flags."}
