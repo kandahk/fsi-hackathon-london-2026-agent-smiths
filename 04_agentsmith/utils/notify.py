@@ -25,8 +25,15 @@ SLACK_API_BASE = "https://slack.com/api"
 
 
 def _escape(text: object) -> str:
-    """Slack mrkdwn treats & < > specially; escape them so data can't inject links or mentions."""
-    return str(text).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    """Make untrusted text safe for Slack mrkdwn.
+
+    Escapes & < > so data can't inject links or mentions, and replaces backticks so it can't open or close a code
+    span or block (which would let later text escape our formatting).
+    """
+    return str(text).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("`", "'")
+
+
+_code = _escape  # same treatment inside code spans and blocks
 
 
 def _review_section(thread_id: str | None) -> list[str]:
@@ -35,7 +42,7 @@ def _review_section(thread_id: str | None) -> list[str]:
         return []
     base_url = os.environ.get("AGENTSMITH_BASE_URL") or os.environ.get("LANGSMITH_HOST_API_URL", "")
     tenant, deployment = os.environ.get("LANGSMITH_TENANT_ID"), os.environ.get("LANGSMITH_HOST_PROJECT_ID")
-    lines = ["", "*To review and decide*", f"Thread ID: `{_escape(thread_id)}`"]
+    lines = ["", "*To review and decide*", f"Thread ID: `{_code(thread_id)}`"]
     if tenant and deployment:
         url = f"https://smith.langchain.com/o/{tenant}/host/deployments/{deployment}"
         lines.append(f"<{url}|Open the deployment in LangSmith> (then Studio, and find the thread above)")
@@ -44,8 +51,8 @@ def _review_section(thread_id: str | None) -> list[str]:
             "Or resume it from code:",
             "```",
             "from langgraph_sdk import get_sync_client",
-            f'client = get_sync_client(url="{_escape(base_url)}", api_key="<your LangSmith API key>")',
-            f'client.runs.wait("{_escape(thread_id)}", "agentsmith",',
+            f'client = get_sync_client(url="{_code(base_url)}", api_key="<your LangSmith API key>")',
+            f'client.runs.wait("{_code(thread_id)}", "agentsmith",',
             '    command={"resume": {"decision": "investigate" | "clear", "notes": "..."}})',
             "```",
         ]
@@ -61,8 +68,8 @@ def build_message(state: dict, thread_id: str | None = None) -> str:
     lines = [
         f":rotating_light: *AgentSmith: review required, {_escape(chain)} (risk {state.get('risk_score')}/100)*",
         "",
-        f"*Alert transaction:* `{_escape(state.get('alert_transaction_id'))}`",
-        f"*Chain:* `{_escape(chain)}`   *Banks:* {_escape(', '.join(banks))}",
+        f"*Alert transaction:* `{_code(state.get('alert_transaction_id'))}`",
+        f"*Chain:* `{_code(chain)}`   *Banks:* {_escape(', '.join(banks))}",
         f"*Risk score:* {state.get('risk_score')}/100 (review threshold 70)",
         "",
         "*Why it was flagged*",
@@ -75,9 +82,11 @@ def build_message(state: dict, thread_id: str | None = None) -> str:
         "```",
     ]
     for leg in sorted(legs, key=lambda l: l.get("timestamp", ""))[:MAX_LEGS_SHOWN]:
+        amount = leg.get("amount", 0)
+        amount = f"£{amount:,.2f}" if isinstance(amount, (int, float)) else _code(amount)
         lines.append(
-            f"{leg.get('timestamp', '')[11:19]}  {leg.get('bank_id')}  {leg.get('account_id')}  "
-            f"{leg.get('type')}  £{leg.get('amount', 0):,.2f}  -> {leg.get('counterparty_account')}"
+            f"{_code(str(leg.get('timestamp', ''))[11:19])}  {_code(leg.get('bank_id'))}  {_code(leg.get('account_id'))}  "
+            f"{_code(leg.get('type'))}  {amount}  -> {_code(leg.get('counterparty_account'))}"
         )
     if len(legs) > MAX_LEGS_SHOWN:
         lines.append(f"... and {len(legs) - MAX_LEGS_SHOWN} more legs")
