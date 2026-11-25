@@ -131,8 +131,8 @@ def _merge_enrichments(llm: list[dict], basic: list[dict]) -> list[dict]:
     for floor in basic:
         merged = by_bank.setdefault(floor["bank_id"], dict(floor))
         merged["risk_flags"] = sorted(set(merged.get("risk_flags", [])) | set(floor["risk_flags"]))
-        merged["new_account_names"] = sorted(
-            set(merged.get("new_account_names", [])) | set(floor["new_account_names"])
+        merged["new_account_refs"] = sorted(
+            set(merged.get("new_account_refs", [])) | set(floor["new_account_refs"])
         )
     return list(by_bank.values())
 
