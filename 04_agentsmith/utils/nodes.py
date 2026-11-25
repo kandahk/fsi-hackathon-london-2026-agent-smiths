@@ -125,6 +125,18 @@ def _basic_enrichments(bank_data: dict, legs: list[dict] | None = None) -> list[
     return enrichments
 
 
+def _merge_enrichments(llm: list[dict], basic: list[dict]) -> list[dict]:
+    """Per bank: keep the analyst's assessment, but union its flags and new-account names with the deterministic ones."""
+    by_bank = {e["bank_id"]: dict(e) for e in llm}
+    for floor in basic:
+        merged = by_bank.setdefault(floor["bank_id"], dict(floor))
+        merged["risk_flags"] = sorted(set(merged.get("risk_flags", [])) | set(floor["risk_flags"]))
+        merged["new_account_names"] = sorted(
+            set(merged.get("new_account_names", [])) | set(floor["new_account_names"])
+        )
+    return list(by_bank.values())
+
+
 # ---------------------------------------------------------------------------
 # Graph nodes
 # ---------------------------------------------------------------------------
@@ -176,9 +188,12 @@ def enrich_banks(state: AgentState, runtime: Runtime[AgentContext] = None) -> di
         result = enrichment_agent.invoke({"messages": [{"role": "user", "content": prompt}]})
         enrichments = _extract_enrichments(result.get("messages", []), bank_data)
     except Exception:
-        enrichments = _basic_enrichments(bank_data, legs)
+        enrichments = []
 
-    return {"bank_enrichments": enrichments}
+    # The analysts add judgement, but profile facts (new account, foreign national, unusual amount) are
+    # deterministic, so they are a floor the model cannot drop. LangSmith evals showed the LLM analysts
+    # sometimes returned no flags for chains whose profiles clearly had them.
+    return {"bank_enrichments": _merge_enrichments(enrichments, _basic_enrichments(bank_data, legs))}
 
 
 def score_risk(
