@@ -43,6 +43,7 @@ SCENARIOS = [
     {"alert_transaction_id": "TXN-A-013", "chain_id": "CHAIN-007", "expected_label": "legitimate"},
     {"alert_transaction_id": "TXN-B-013", "chain_id": "CHAIN-008", "expected_label": "legitimate"},
     {"alert_transaction_id": "TXN-A-010", "chain_id": None,        "expected_label": "legitimate"},
+    {"alert_transaction_id": "TXN-A-016", "chain_id": "CHAIN-009", "expected_label": "legitimate"},
 ]
 
 

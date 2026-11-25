@@ -7,3 +7,4 @@
 {"chain_id": "CHAIN-007", "label": "legitimate", "pattern": null, "notes": "Supplier invoice settlement, single large transfer BANK-A to BANK-C, established accounts"}
 {"chain_id": "CHAIN-008", "label": "legitimate", "pattern": null, "notes": "International wire transfer BANK-B to BANK-C for property deposit, amounts consistent with customer profile"}
 {"chain_id": null, "transaction_id": "TXN-A-010", "label": "legitimate", "pattern": null, "notes": "Single-bank domestic card payment, no cross-bank pattern"}
+{"chain_id": "CHAIN-009", "label": "legitimate", "pattern": null, "notes": "Property settlement: established account receives £120k and distributes to solicitor, estate agent and deposit account within 2 minutes — legitimate conveyancing, rapid distribution triggers learned rules"}
